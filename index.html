@@ -42,6 +42,18 @@
             color: #64748b;
             font-weight: bold;
         }
+
+        /* Custom Scrollbar for Ranking */
+        .ranking-list::-webkit-scrollbar {
+            width: 4px;
+        }
+        .ranking-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .ranking-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex items-center justify-center p-2 sm:p-4">
@@ -55,9 +67,13 @@
                 </div>
             </div>
             <h1 class="text-3xl font-bold text-slate-800 mb-2">단항식 마스터</h1>
-            <p class="text-slate-500 mb-8 font-medium">지수법칙과 단항식 계산!<br>정답 +100 | 오답 -40<br>제한 시간: 50초</p>
-            <button onclick="startGame()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl text-xl font-bold shadow-lg hover:bg-indigo-700 tap-effect">
+            <p class="text-slate-500 mb-6 font-medium">지수법칙과 단항식 계산!<br><span class="text-indigo-600">정답 +100</span> | <span class="text-red-500 font-bold">오답 -150</span></p>
+            
+            <button onclick="startGame()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl text-xl font-bold shadow-lg hover:bg-indigo-700 tap-effect mb-4">
                 게임 시작
+            </button>
+            <button onclick="showRanking()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl text-lg font-bold hover:bg-slate-200 tap-effect">
+                랭킹 보기
             </button>
         </div>
 
@@ -86,10 +102,33 @@
             <div class="text-6xl font-black text-indigo-600 mb-2" id="final-score">0</div>
             <p class="text-slate-500 mb-6 font-medium text-lg">점 획득</p>
             
-            <div id="feedback" class="mb-8 p-6 rounded-2xl text-base leading-relaxed font-bold"></div>
+            <div id="feedback" class="mb-6 p-4 rounded-2xl text-sm leading-relaxed font-bold"></div>
+
+            <div id="ranking-input-area" class="mb-6">
+                <input type="text" id="nickname" maxlength="8" placeholder="닉네임 입력 (최대 8자)" class="w-full p-4 border-2 border-slate-200 rounded-2xl mb-3 text-center text-lg focus:border-indigo-500 outline-none">
+                <button onclick="saveScore()" id="save-btn" class="w-full py-3 bg-indigo-500 text-white rounded-2xl font-bold hover:bg-indigo-600 tap-effect">
+                    랭킹 등록하기
+                </button>
+            </div>
 
             <button onclick="startGame()" class="w-full py-4 bg-slate-800 text-white rounded-2xl text-xl font-bold shadow-lg hover:bg-slate-900 tap-effect">
                 다시 도전하기
+            </button>
+        </div>
+
+        <!-- Ranking Screen -->
+        <div id="ranking-screen" class="hidden p-6 flex flex-col h-full">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-800">TOP 10 랭킹</h2>
+                <button onclick="adminReset()" class="text-slate-300 hover:text-slate-400 text-xs">관리</button>
+            </div>
+            
+            <div id="ranking-list" class="ranking-list flex-grow overflow-y-auto mb-6 space-y-2 pr-1">
+                <!-- Ranking items here -->
+            </div>
+
+            <button onclick="showScreen('start')" class="w-full py-4 bg-slate-800 text-white rounded-2xl text-xl font-bold tap-effect">
+                메인으로
             </button>
         </div>
     </div>
@@ -101,10 +140,14 @@
         let currentAnswer = "";
         let isProcessing = false;
 
+        // 비속어 필터링 리스트 (확장 가능)
+        const badWords = ["바보", "멍청이", "시발", "개새", "끼", "니미", "미친", "지랄", "좆", "븅신"];
+
         const screens = {
             start: document.getElementById('start-screen'),
             game: document.getElementById('game-screen'),
-            result: document.getElementById('result-screen')
+            result: document.getElementById('result-screen'),
+            ranking: document.getElementById('ranking-screen')
         };
 
         function showScreen(screenName) {
@@ -148,6 +191,11 @@
             isProcessing = false;
             document.getElementById('score').innerText = score;
             document.getElementById('timer').innerText = timeLeft;
+            document.getElementById('nickname').value = "";
+            document.getElementById('save-btn').disabled = false;
+            document.getElementById('save-btn').innerText = "랭킹 등록하기";
+            document.getElementById('save-btn').className = "w-full py-3 bg-indigo-500 text-white rounded-2xl font-bold hover:bg-indigo-600 tap-effect";
+            
             showScreen('game');
             nextQuestion();
             
@@ -164,7 +212,6 @@
         }
 
         function generateQuestion() {
-            // 난이도 상승 곡선 (1600점 기준에 맞춰 조정)
             const level = Math.floor(score / 350); 
             const useY = level >= 1;
             
@@ -172,7 +219,7 @@
             let ans = { c: 1, x: 0, y: 0 };
             const type = level < 1 ? Math.floor(Math.random() * 2) : Math.floor(Math.random() * 3);
 
-            if (type === 0) { // Multiply
+            if (type === 0) {
                 let c1 = (Math.floor(Math.random() * 6) + 1) * (Math.random() > 0.5 ? 1 : -1);
                 let x1 = Math.floor(Math.random() * 3) + 1;
                 let y1 = useY ? Math.floor(Math.random() * 3) : 0;
@@ -182,7 +229,7 @@
                 qHtml = `${formatMonomial(c1, x1, y1)} <span class="op-box">×</span> ${formatMonomial(c2, x2, y2)}`;
                 ans = { c: c1 * c2, x: x1 + x2, y: y1 + y2 };
             } 
-            else if (type === 1) { // Divide
+            else if (type === 1) {
                 let c2 = Math.floor(Math.random() * 4) + 1;
                 let x2 = Math.floor(Math.random() * 3) + 1;
                 let y2 = useY ? Math.floor(Math.random() * 2) : 0;
@@ -195,7 +242,7 @@
                 qHtml = `${formatMonomial(c1, x1, y1)} <span class="op-box">÷</span> ${formatMonomial(c2, x2, y2)}`;
                 ans = { c: resC, x: resX, y: resY };
             }
-            else { // Power
+            else {
                 let c = Math.floor(Math.random() * 3) + 2; 
                 let x = Math.floor(Math.random() * 3) + 1;
                 let y = useY ? Math.floor(Math.random() * 2) + 1 : 0;
@@ -208,30 +255,23 @@
             let options = [{ key: correctKey, html: formatMonomial(ans.c, ans.x, ans.y) }];
             let optionKeys = new Set([correctKey]);
 
-            // 매력적 오답 생성 (계수는 같고 지수만 다른 경우 등)
             while (options.length < 4) {
                 let fc = ans.c;
                 let fx = ans.x;
                 let fy = ans.y;
-
                 const roll = Math.random();
                 if (roll < 0.3) {
-                    // 계수는 정답과 동일, 지수만 1~2 차이
                     fx = Math.max(0, ans.x + (Math.random() > 0.5 ? 1 : -1));
                     if (useY) fy = Math.max(0, ans.y + (Math.random() > 0.5 ? 1 : -1));
                 } else if (roll < 0.6) {
-                    // 지수는 정답과 동일, 계수 부호만 반전
                     fc = -ans.c;
                 } else if (roll < 0.8) {
-                    // 계수와 지수 둘 다 조금씩 틀림
                     fc = ans.c + (Math.floor(Math.random() * 3) + 1) * (Math.random() > 0.5 ? 1 : -1);
                     fx = Math.max(0, ans.x + 1);
                 } else {
-                    // 지수법칙 혼동 (더하기 대신 곱하기 등)
                     fx = ans.x + 2;
                     fc = ans.c;
                 }
-
                 if (fc === 0) fc = 3;
                 let fKey = `${fc},${fx},${fy}`;
                 if (!optionKeys.has(fKey)) {
@@ -268,7 +308,7 @@
                 btn.classList.add('bg-green-50', 'text-green-700');
                 setTimeout(nextQuestion, 200);
             } else {
-                score = Math.max(0, score - 40);
+                score = Math.max(0, score - 150);
                 updateScoreUI('down');
                 btn.classList.replace('border-slate-200', 'border-red-500');
                 btn.classList.add('bg-red-50', 'text-red-700', 'shake');
@@ -284,14 +324,13 @@
             let comment = "";
             let theme = { bg: "bg-slate-100", text: "text-slate-600" };
 
-            // 1600점 이상을 초고득점으로 설정한 유머 피드백
             if (score === 0) {
                 title = "손가락 압수! ✋";
-                comment = "0점이라니... <br>뇌가 잠시 로그아웃 하셨나요? <br>기초부터 다시 가봅시다!";
+                comment = "0점이라니... <br>감점 150점의 매운맛을 보셨군요? <br>정확도가 생명입니다!";
                 theme = { bg: "bg-red-50", text: "text-red-700" };
             } else if (score < 400) {
                 title = "지수 유치원생 🐥";
-                comment = "더하기 빼기는 할 줄 아시죠? <br>조금만 더 집중하면 <br>세 자릿수는 넘길 수 있습니다!";
+                comment = "한 번 틀릴 때마다 점수가 <br>삭제되는 마법! <br>신중하게 다시 해보세요.";
                 theme = { bg: "bg-orange-50", text: "text-orange-800" };
             } else if (score < 1000) {
                 title = "평범한 지구인 🌍";
@@ -303,20 +342,96 @@
                 theme = { bg: "bg-blue-50", text: "text-blue-700" };
             } else if (score < 2500) {
                 title = "인간 계산기 (초고득점자) 🤖";
-                comment = "말도 안 돼! 1600점을 넘기다니! <br>당신의 뇌는 퀀텀 프로세서입니까? <br>연산 속도가 미쳤습니다!";
+                comment = "1600점 돌파! <br>감점 리스크를 뚫고 올라온 <br>당신은 진정한 연산 머신!";
                 theme = { bg: "bg-purple-50", text: "text-purple-700" };
             } else {
                 title = "수학의 신 (God Mode) 👑";
-                comment = "경배하라! 단항식의 파괴자여! <br>지수법칙은 당신의 숨결과 같군요. <br>진정한 마스터로 인정합니다!";
+                comment = "이 점수가 가능하긴 한가요? <br>단 한 번의 실수도 허용하지 않은 <br>완벽한 마스터의 탄생!";
                 theme = { bg: "bg-indigo-100", text: "text-indigo-800" };
             }
             
             const fbEl = document.getElementById('feedback');
             document.getElementById('result-title').innerText = title;
             fbEl.innerHTML = comment;
-            fbEl.className = `mb-8 p-6 rounded-2xl text-base leading-relaxed font-bold ${theme.bg} ${theme.text}`;
+            fbEl.className = `mb-6 p-4 rounded-2xl text-sm leading-relaxed font-bold ${theme.bg} ${theme.text}`;
             
             showScreen('result');
+        }
+
+        // --- Ranking Logic ---
+
+        function saveScore() {
+            const nickname = document.getElementById('nickname').value.trim();
+            const btn = document.getElementById('save-btn');
+
+            if (!nickname) {
+                customAlert("닉네임을 입력해주세요!");
+                return;
+            }
+
+            // 비속어 필터링
+            for (let word of badWords) {
+                if (nickname.includes(word)) {
+                    customAlert("닉네임에 부적절한 단어가 포함되어 있습니다.");
+                    return;
+                }
+            }
+
+            let rankings = JSON.parse(localStorage.getItem('monomial_rankings') || '[]');
+            rankings.push({ name: nickname, score: score, date: new Date().toLocaleDateString() });
+            rankings.sort((a, b) => b.score - a.score);
+            rankings = rankings.slice(0, 10); // TOP 10만 유지
+
+            localStorage.setItem('monomial_rankings', JSON.stringify(rankings));
+            
+            btn.disabled = true;
+            btn.innerText = "등록 완료!";
+            btn.className = "w-full py-3 bg-slate-300 text-white rounded-2xl font-bold cursor-not-allowed";
+            
+            setTimeout(showRanking, 800);
+        }
+
+        function showRanking() {
+            const list = document.getElementById('ranking-list');
+            const rankings = JSON.parse(localStorage.getItem('monomial_rankings') || '[]');
+            
+            list.innerHTML = rankings.length === 0 
+                ? '<div class="text-center text-slate-400 py-10">아직 등록된 랭킹이 없습니다.</div>' 
+                : rankings.map((item, index) => `
+                    <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div class="flex items-center gap-4">
+                            <span class="w-6 text-center font-bold ${index < 3 ? 'text-indigo-600' : 'text-slate-400'}">${index + 1}</span>
+                            <span class="font-bold text-slate-700">${item.name}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-black text-indigo-600">${item.score}</div>
+                            <div class="text-[10px] text-slate-400">${item.date}</div>
+                        </div>
+                    </div>
+                `).join('');
+            
+            showScreen('ranking');
+        }
+
+        function adminReset() {
+            const pw = prompt("관리자 비밀번호를 입력하세요:");
+            if (pw === "4924") {
+                if (confirm("모든 랭킹 데이터를 초기화하시겠습니까?")) {
+                    localStorage.removeItem('monomial_rankings');
+                    showRanking();
+                }
+            } else if (pw !== null) {
+                customAlert("비밀번호가 틀렸습니다.");
+            }
+        }
+
+        function customAlert(msg) {
+            // Simple replacement for alert() in iframe
+            const alertDiv = document.createElement('div');
+            alertDiv.className = "fixed top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full text-sm font-bold shadow-2xl z-50 animate-bounce";
+            alertDiv.innerText = msg;
+            document.body.appendChild(alertDiv);
+            setTimeout(() => alertDiv.remove(), 2000);
         }
     </script>
 </body>
