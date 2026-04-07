@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>단항식 마스터! 타임어택</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+        body { 
+            font-family: 'Noto Sans KR', sans-serif; 
+            touch-action: manipulation; 
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        .math-expr { font-family: 'Times New Roman', serif; font-style: italic; }
+        sup { font-size: 0.6em; margin-left: 1px; vertical-align: super; font-style: normal; }
+        
+        .q-text { font-size: 2.2rem; }
+        @media (min-height: 700px) {
+            .q-text { font-size: 2.8rem; }
+        }
+        
+        .progress-bar { transition: width 0.1s linear; }
+        .tap-effect:active { transform: scale(0.95); }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake { animation: shake 0.15s ease-in-out 0s 2; }
+        
+        .score-up { color: #22c55e; transform: scale(1.1); transition: 0.2s; }
+        .score-down { color: #ef4444; transform: scale(0.9); transition: 0.2s; }
+
+        .op-box {
+            display: inline-block;
+            padding: 0 10px;
+            color: #64748b;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-2 sm:p-4">
+
+    <div id="app" class="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200 flex flex-col">
+        <!-- Start Screen -->
+        <div id="start-screen" class="p-8 text-center">
+            <div class="mb-6 inline-block p-6 bg-indigo-100 rounded-3xl">
+                <div class="math-expr text-indigo-600 text-4xl font-bold">
+                    (2x<sup>2</sup>)<sup>3</sup> ÷ 4x
+                </div>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-800 mb-2">단항식 마스터</h1>
+            <p class="text-slate-500 mb-8 font-medium">지수법칙과 단항식 계산!<br>정답 +100 | 오답 -40<br>제한 시간: 50초</p>
+            <button onclick="startGame()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl text-xl font-bold shadow-lg hover:bg-indigo-700 tap-effect">
+                게임 시작
+            </button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="hidden p-4 sm:p-6 flex flex-col h-full">
+            <div class="flex justify-between items-center mb-4">
+                <div class="text-lg font-bold text-slate-700">점수: <span id="score">0</span></div>
+                <div class="text-lg font-bold text-orange-600">시간: <span id="timer">50</span>s</div>
+            </div>
+            
+            <div class="w-full bg-slate-200 h-2 rounded-full mb-6 overflow-hidden">
+                <div id="progress" class="progress-bar h-full bg-orange-500" style="width: 100%"></div>
+            </div>
+
+            <div class="text-center mb-6 p-6 bg-slate-50 rounded-2xl border-2 border-slate-100 flex-grow flex flex-col justify-center">
+                <div class="text-slate-400 text-xs mb-4 font-medium uppercase tracking-wider">Calculate the Monomial</div>
+                <div id="question-area" class="math-expr font-bold text-slate-800 q-text leading-tight"></div>
+            </div>
+
+            <div id="options-grid" class="grid grid-cols-2 gap-3 mb-2"></div>
+        </div>
+
+        <!-- Result Screen -->
+        <div id="result-screen" class="hidden p-8 text-center">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4" id="result-title">최종 결과</h2>
+            <div class="text-6xl font-black text-indigo-600 mb-2" id="final-score">0</div>
+            <p class="text-slate-500 mb-6 font-medium text-lg">점 획득</p>
+            
+            <div id="feedback" class="mb-8 p-6 rounded-2xl text-base leading-relaxed font-bold"></div>
+
+            <button onclick="startGame()" class="w-full py-4 bg-slate-800 text-white rounded-2xl text-xl font-bold shadow-lg hover:bg-slate-900 tap-effect">
+                다시 도전하기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let timeLeft = 50;
+        let timerInterval;
+        let currentAnswer = "";
+        let isProcessing = false;
+
+        const screens = {
+            start: document.getElementById('start-screen'),
+            game: document.getElementById('game-screen'),
+            result: document.getElementById('result-screen')
+        };
+
+        function showScreen(screenName) {
+            Object.values(screens).forEach(s => s.classList.add('hidden'));
+            screens[screenName].classList.remove('hidden');
+        }
+
+        function updateScoreUI(type) {
+            const scoreEl = document.getElementById('score');
+            scoreEl.innerText = score;
+            const animationClass = type === 'up' ? 'score-up' : 'score-down';
+            scoreEl.classList.add(animationClass);
+            setTimeout(() => scoreEl.classList.remove(animationClass), 200);
+        }
+
+        function formatMonomial(coeff, expX, expY = 0) {
+            let res = "";
+            if (coeff === 1) {
+                if (expX === 0 && expY === 0) res = "1";
+            } else if (coeff === -1) {
+                res = "-";
+                if (expX === 0 && expY === 0) res = "-1";
+            } else {
+                res = coeff.toString();
+            }
+
+            if (expX > 0) {
+                res += "x";
+                if (expX > 1) res += `<sup>${expX}</sup>`;
+            }
+            if (expY > 0) {
+                res += "y";
+                if (expY > 1) res += `<sup>${expY}</sup>`;
+            }
+            return res;
+        }
+
+        function startGame() {
+            score = 0;
+            timeLeft = 50;
+            isProcessing = false;
+            document.getElementById('score').innerText = score;
+            document.getElementById('timer').innerText = timeLeft;
+            showScreen('game');
+            nextQuestion();
+            
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft -= 0.1;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    endGame();
+                }
+                document.getElementById('timer').innerText = Math.max(0, Math.ceil(timeLeft));
+                document.getElementById('progress').style.width = (timeLeft / 50 * 100) + "%";
+            }, 100);
+        }
+
+        function generateQuestion() {
+            // 난이도 상승 곡선 (1600점 기준에 맞춰 조정)
+            const level = Math.floor(score / 350); 
+            const useY = level >= 1;
+            
+            let qHtml = "";
+            let ans = { c: 1, x: 0, y: 0 };
+            const type = level < 1 ? Math.floor(Math.random() * 2) : Math.floor(Math.random() * 3);
+
+            if (type === 0) { // Multiply
+                let c1 = (Math.floor(Math.random() * 6) + 1) * (Math.random() > 0.5 ? 1 : -1);
+                let x1 = Math.floor(Math.random() * 3) + 1;
+                let y1 = useY ? Math.floor(Math.random() * 3) : 0;
+                let c2 = Math.floor(Math.random() * 4) + 1;
+                let x2 = Math.floor(Math.random() * 3) + 1;
+                let y2 = useY ? Math.floor(Math.random() * 3) : 0;
+                qHtml = `${formatMonomial(c1, x1, y1)} <span class="op-box">×</span> ${formatMonomial(c2, x2, y2)}`;
+                ans = { c: c1 * c2, x: x1 + x2, y: y1 + y2 };
+            } 
+            else if (type === 1) { // Divide
+                let c2 = Math.floor(Math.random() * 4) + 1;
+                let x2 = Math.floor(Math.random() * 3) + 1;
+                let y2 = useY ? Math.floor(Math.random() * 2) : 0;
+                let resC = (Math.floor(Math.random() * 4) + 1) * (Math.random() > 0.5 ? 1 : -1);
+                let resX = Math.floor(Math.random() * 3);
+                let resY = useY ? Math.floor(Math.random() * 2) : 0;
+                let c1 = c2 * resC;
+                let x1 = x2 + resX;
+                let y1 = y2 + resY;
+                qHtml = `${formatMonomial(c1, x1, y1)} <span class="op-box">÷</span> ${formatMonomial(c2, x2, y2)}`;
+                ans = { c: resC, x: resX, y: resY };
+            }
+            else { // Power
+                let c = Math.floor(Math.random() * 3) + 2; 
+                let x = Math.floor(Math.random() * 3) + 1;
+                let y = useY ? Math.floor(Math.random() * 2) + 1 : 0;
+                let p = Math.floor(Math.random() * 2) + 2; 
+                qHtml = `(${formatMonomial(c, x, y)})<sup>${p}</sup>`;
+                ans = { c: Math.pow(c, p), x: x * p, y: y * p };
+            }
+
+            const correctKey = `${ans.c},${ans.x},${ans.y}`;
+            let options = [{ key: correctKey, html: formatMonomial(ans.c, ans.x, ans.y) }];
+            let optionKeys = new Set([correctKey]);
+
+            // 매력적 오답 생성 (계수는 같고 지수만 다른 경우 등)
+            while (options.length < 4) {
+                let fc = ans.c;
+                let fx = ans.x;
+                let fy = ans.y;
+
+                const roll = Math.random();
+                if (roll < 0.3) {
+                    // 계수는 정답과 동일, 지수만 1~2 차이
+                    fx = Math.max(0, ans.x + (Math.random() > 0.5 ? 1 : -1));
+                    if (useY) fy = Math.max(0, ans.y + (Math.random() > 0.5 ? 1 : -1));
+                } else if (roll < 0.6) {
+                    // 지수는 정답과 동일, 계수 부호만 반전
+                    fc = -ans.c;
+                } else if (roll < 0.8) {
+                    // 계수와 지수 둘 다 조금씩 틀림
+                    fc = ans.c + (Math.floor(Math.random() * 3) + 1) * (Math.random() > 0.5 ? 1 : -1);
+                    fx = Math.max(0, ans.x + 1);
+                } else {
+                    // 지수법칙 혼동 (더하기 대신 곱하기 등)
+                    fx = ans.x + 2;
+                    fc = ans.c;
+                }
+
+                if (fc === 0) fc = 3;
+                let fKey = `${fc},${fx},${fy}`;
+                if (!optionKeys.has(fKey)) {
+                    optionKeys.add(fKey);
+                    options.push({ key: fKey, html: formatMonomial(fc, fx, fy) });
+                }
+            }
+            return { qHtml: qHtml, answerKey: correctKey, options: options.sort(() => Math.random() - 0.5) };
+        }
+
+        function nextQuestion() {
+            isProcessing = false;
+            const q = generateQuestion();
+            currentAnswer = q.answerKey;
+            document.getElementById('question-area').innerHTML = q.qHtml;
+            const grid = document.getElementById('options-grid');
+            grid.innerHTML = '';
+            q.options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full py-4 px-2 bg-white border-2 border-slate-200 rounded-2xl flex justify-center items-center gap-1 hover:border-indigo-400 hover:bg-indigo-50 tap-effect transition-all h-20 text-xl font-bold text-slate-700 math-expr";
+                btn.innerHTML = opt.html;
+                btn.onclick = () => checkAnswer(opt.key, btn);
+                grid.appendChild(btn);
+            });
+        }
+
+        function checkAnswer(selectedKey, btn) {
+            if (isProcessing) return;
+            if (selectedKey === currentAnswer) {
+                isProcessing = true;
+                score += 100;
+                updateScoreUI('up');
+                btn.classList.replace('border-slate-200', 'border-green-500');
+                btn.classList.add('bg-green-50', 'text-green-700');
+                setTimeout(nextQuestion, 200);
+            } else {
+                score = Math.max(0, score - 40);
+                updateScoreUI('down');
+                btn.classList.replace('border-slate-200', 'border-red-500');
+                btn.classList.add('bg-red-50', 'text-red-700', 'shake');
+                setTimeout(() => { btn.classList.remove('shake'); }, 400);
+            }
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+            document.getElementById('final-score').innerText = score;
+            
+            let title = "";
+            let comment = "";
+            let theme = { bg: "bg-slate-100", text: "text-slate-600" };
+
+            // 1600점 이상을 초고득점으로 설정한 유머 피드백
+            if (score === 0) {
+                title = "손가락 압수! ✋";
+                comment = "0점이라니... <br>뇌가 잠시 로그아웃 하셨나요? <br>기초부터 다시 가봅시다!";
+                theme = { bg: "bg-red-50", text: "text-red-700" };
+            } else if (score < 400) {
+                title = "지수 유치원생 🐥";
+                comment = "더하기 빼기는 할 줄 아시죠? <br>조금만 더 집중하면 <br>세 자릿수는 넘길 수 있습니다!";
+                theme = { bg: "bg-orange-50", text: "text-orange-800" };
+            } else if (score < 1000) {
+                title = "평범한 지구인 🌍";
+                comment = "딱 평균이네요. <br>어디 가서 수학 잘한다는 소리는 <br>주변 눈치 보고 하세요!";
+                theme = { bg: "bg-yellow-50", text: "text-yellow-800" };
+            } else if (score < 1600) {
+                title = "학원가 유망주 😎";
+                comment = "오~ 암산 속도가 상당합니다! <br>조금만 더 속도를 내면 <br>천계의 영역에 도달할 수 있어요.";
+                theme = { bg: "bg-blue-50", text: "text-blue-700" };
+            } else if (score < 2500) {
+                title = "인간 계산기 (초고득점자) 🤖";
+                comment = "말도 안 돼! 1600점을 넘기다니! <br>당신의 뇌는 퀀텀 프로세서입니까? <br>연산 속도가 미쳤습니다!";
+                theme = { bg: "bg-purple-50", text: "text-purple-700" };
+            } else {
+                title = "수학의 신 (God Mode) 👑";
+                comment = "경배하라! 단항식의 파괴자여! <br>지수법칙은 당신의 숨결과 같군요. <br>진정한 마스터로 인정합니다!";
+                theme = { bg: "bg-indigo-100", text: "text-indigo-800" };
+            }
+            
+            const fbEl = document.getElementById('feedback');
+            document.getElementById('result-title').innerText = title;
+            fbEl.innerHTML = comment;
+            fbEl.className = `mb-8 p-6 rounded-2xl text-base leading-relaxed font-bold ${theme.bg} ${theme.text}`;
+            
+            showScreen('result');
+        }
+    </script>
+</body>
+</html>
